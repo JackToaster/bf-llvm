@@ -1,4 +1,4 @@
-use inkwell::values::IntValue;
+use inkwell::{IntPredicate, values::IntValue};
 
 use crate::parser::ast::{ASTBranch, ASTElement, Operation};
 
@@ -17,8 +17,34 @@ impl<'ctx> Generate<'ctx> for ASTBranch {
 impl<'ctx> Generate<'ctx> for ASTElement {
     fn generate(&self, context: &'ctx inkwell::context::Context, builder: &inkwell::builder::Builder<'ctx>, globals: &BfGlobals) {
         match self {
-            ASTElement::Loop(_) => {
-                todo!()
+            ASTElement::Loop(contents) => {
+                let head = context.append_basic_block(globals.function, "");
+                let body = context.append_basic_block(globals.function, "");
+                let tail = context.append_basic_block(globals.function, "");   
+
+                builder.build_unconditional_branch(head);
+                builder.position_at_end(head);
+
+
+                // Branch to skip loop body if the value is zero
+                let branch_condition = builder.build_int_compare(
+                    IntPredicate::EQ,
+                    generate_get(context, builder, globals),
+                    context.i8_type().const_int(0, false),
+                    "",
+                );
+
+                builder.build_conditional_branch(branch_condition, tail, body);
+
+
+                // Go to the body and fill it with the loop contents
+                builder.position_at_end(body);
+                contents.generate(context, builder, globals);
+                // Branch from loop body end to loop start.
+                builder.build_unconditional_branch(head);
+
+                // Put the builder back at the end
+                builder.position_at_end(tail);
             }
             ASTElement::Operation(op) => {op.generate(context, builder, globals)}
         }
